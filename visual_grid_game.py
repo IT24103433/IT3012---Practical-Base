@@ -38,12 +38,23 @@ class VisualGridHuntGame:
         self.score = 0
         self.steps = 0
         self.collision = False
+        # Toxic traps: harmful cells that reduce score when entered
+        self.toxic_traps = set()
+        # Populate traps avoiding the agent start, walls, and food
+        max_traps = max(1, min(8, (self.width * self.height) // 12))
+        while len(self.toxic_traps) < max_traps:
+            tx = random.randint(0, self.width - 1)
+            ty = random.randint(0, self.height - 1)
+            tpos = (tx, ty)
+            if tpos != (0, 0) and tpos not in self.walls and tpos not in self.food_positions:
+                self.toxic_traps.add(tpos)
 
     def get_percept(self) -> dict:
         return {
             'agent_pos': list(self.agent_pos),
             'opponent_positions': [list(op) for op in self.opponents],
             'smells_food': tuple(self.agent_pos) in self.food_positions,
+            'smells_toxin': tuple(self.agent_pos) in self.toxic_traps,
             'hit_wall': tuple(self.agent_pos) in self.walls,
             'collision': self.collision,
             'score': self.score,
@@ -72,6 +83,10 @@ class VisualGridHuntGame:
         if tuple_pos in self.food_positions:
             self.food_positions.remove(tuple_pos)
             self.score += 20
+
+        # Trap penalty: stepping on a toxic trap reduces score
+        if tuple_pos in self.toxic_traps:
+            self.score -= 15
 
         for op in self.opponents:
             move = random.choice(['Up', 'Down', 'Left', 'Right', 'Stay'])
@@ -104,15 +119,18 @@ class GridGameGUI:
 
         # Dynamically calculate cell size so the total canvas fits nicely within a 600x600 window ceiling
         max_canvas_dim = 600
-        self.cell_size = max(20, min(max_canvas_dim // self.env.width, max_canvas_dim // self.env.height))
+        self.cell_size = max(
+            20, min(max_canvas_dim // self.env.width, max_canvas_dim // self.env.height))
 
         canvas_w = self.env.width * self.cell_size
         canvas_h = self.env.height * self.cell_size
 
-        self.canvas = tk.Canvas(root, width=canvas_w, height=canvas_h, bg="white")
+        self.canvas = tk.Canvas(root, width=canvas_w,
+                                height=canvas_h, bg="white")
         self.canvas.pack()
 
-        self.label = tk.Label(root, text="Score: 0 | Steps: 0", font=("Arial", 14))
+        self.label = tk.Label(
+            root, text="Score: 0 | Steps: 0", font=("Arial", 14))
         self.label.pack(pady=10)
 
         self.btn = tk.Button(root, text="Start Simulation", command=self.run_loop, font=("Arial", 12), bg="#000066",
@@ -131,8 +149,10 @@ class GridGameGUI:
                 x2 = x1 + self.cell_size
                 y2 = y1 + self.cell_size
 
-                color = "#f1f5f9" if (x, y) not in self.env.walls else "#64748b"
-                self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline="#cbd5e1")
+                color = "#f1f5f9" if (
+                    x, y) not in self.env.walls else "#64748b"
+                self.canvas.create_rectangle(
+                    x1, y1, x2, y2, fill=color, outline="#cbd5e1")
 
                 # Only draw text if cell is large enough
                 if self.cell_size >= 40 and (x, y) in self.env.walls:
@@ -153,6 +173,18 @@ class GridGameGUI:
             self.canvas.create_rectangle(x1, y1, x1 + self.cell_size * 0.6, y1 + self.cell_size * 0.6, fill="#990000",
                                          outline="#7a0000")
 
+        # Draw toxic traps as purple diamonds
+        for tx, ty in getattr(self.env, 'toxic_traps', set()):
+            offset = self.cell_size * 0.15
+            cx = tx * self.cell_size + self.cell_size / 2
+            cy = (self.env.height - 1 - ty) * \
+                self.cell_size + self.cell_size / 2
+            size = self.cell_size * 0.24
+            points = [cx, cy - size, cx + size,
+                      cy, cx, cy + size, cx - size, cy]
+            self.canvas.create_polygon(
+                points, fill="#7c3aed", outline="#5b21b6")
+
         ax, ay = self.env.agent_pos
         offset = self.cell_size * 0.15
         x1 = ax * self.cell_size + offset
@@ -169,7 +201,8 @@ class GridGameGUI:
                 self.env.execute_action(action)
 
                 self.draw_grid()
-                self.label.config(text=f"Score: {self.env.score} | Steps: {self.env.steps} | Action: {action}")
+                self.label.config(
+                    text=f"Score: {self.env.score} | Steps: {self.env.steps} | Action: {action}")
                 self.root.after(250, step)
             else:
                 end_text = f"Collision! Game Over! Final Score: {self.env.score}" if self.env.collision else f"Finished! Final Score: {self.env.score}"
