@@ -1,6 +1,7 @@
 # agent.py
 import random
 import heapq
+import math
 from collections import deque
 
 
@@ -67,7 +68,58 @@ class SearchAgent:
 
     def __init__(self):
         self.plan = []
-        self.active_algo = 'BFS'
+        self.active_algo = 'AStar'
+
+    def manhattan_distance(self, pos, goal):
+        return abs(pos[0] - goal[0]) + abs(pos[1] - goal[1])
+
+    def euclidean_distance(self, pos, goal):
+        return math.sqrt((pos[0] - goal[0]) ** 2 + (pos[1] - goal[1]) ** 2)
+
+    def astar_search(self, start_pos, goal_pos, walls, grid_size, heuristic_type='manhattan'):
+        start = (start_pos[0], start_pos[1])
+        goal = (goal_pos[0], goal_pos[1])
+        width, height = grid_size
+        walls = set(walls)
+
+        if heuristic_type == 'euclidean':
+            heuristic = self.euclidean_distance
+        else:
+            heuristic = self.manhattan_distance
+
+        frontier = [(heuristic(start, goal), 0, start, [])]
+        reached_states = set()
+        directions = {
+            'Up': (0, 1),
+            'Down': (0, -1),
+            'Left': (-1, 0),
+            'Right': (1, 0),
+        }
+
+        while frontier:
+            f_cost, g_cost, current_pos, path_taken = heapq.heappop(frontier)
+            if current_pos == goal:
+                return path_taken
+            if current_pos in reached_states:
+                continue
+            reached_states.add(current_pos)
+
+            x, y = current_pos
+            for action, (dx, dy) in directions.items():
+                nx, ny = x + dx, y + dy
+                next_pos = (nx, ny)
+                if not (0 <= nx < width and 0 <= ny < height):
+                    continue
+                if next_pos in walls or next_pos in reached_states:
+                    continue
+                new_g_cost = g_cost + 1
+                new_f_cost = new_g_cost + heuristic(next_pos, goal)
+                heapq.heappush(
+                    frontier,
+                    (new_f_cost, new_g_cost, next_pos, path_taken + [action]),
+                )
+
+        return []
 
     def _search(self, start_pos, goal_pos, walls, grid_size, frontier_type):
         start = (start_pos[0], start_pos[1])
@@ -170,13 +222,21 @@ class SearchAgent:
                     'DFS': self.dfs_search,
                     'UCS': self.ucs_search,
                 }
-                search_method = search_methods.get(
-                    self.active_algo, self.bfs_search)
-                self.plan = search_method(
-                    start_pos,
-                    goal_pos,
-                    percept.get('walls', []),
-                    percept.get('grid_size', (0, 0)),
-                )
+                if self.active_algo == 'AStar':
+                    self.plan = self.astar_search(
+                        start_pos,
+                        goal_pos,
+                        percept.get('walls', []),
+                        percept.get('grid_size', (0, 0)),
+                    )
+                else:
+                    search_method = search_methods.get(
+                        self.active_algo, self.bfs_search)
+                    self.plan = search_method(
+                        start_pos,
+                        goal_pos,
+                        percept.get('walls', []),
+                        percept.get('grid_size', (0, 0)),
+                    )
 
         return self.plan.pop(0) if self.plan else 'Up'
